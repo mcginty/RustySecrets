@@ -1,6 +1,9 @@
 extern crate protobuf;
+use protobuf::{Message, RepeatedField};
+
 extern crate rustc_serialize as serialize;
 extern crate rand;
+extern crate merkle_sigs;
 
 use rand::{ Rng, OsRng };
 use serialize::base64::{ self, FromBase64, ToBase64 };
@@ -15,10 +18,13 @@ use std::iter::repeat;
 pub mod custom_error;
 use custom_error::*;
 
-use protobuf::Message;
+use merkle_sigs::{sign_data_vec, verify_data_vec_signature};
 
 mod ShareDataMod;
 pub use ShareDataMod::{ShareData};
+
+extern crate crypto;
+use crypto::sha3::Sha3;
 
 /// Performs threshold k-out-of-n Shamir secret sharing.
 ///
@@ -46,11 +52,19 @@ pub fn generate_shares(k: u8, n: u8, secret: &[u8]) -> io::Result<Vec<String>> {
 		..base64::STANDARD
 	};
 
+	let shares_to_sign = shares.iter().enumerate().map(|(i, x)| {
+		format!("{}-{}-{}", k, i, x.to_base64(config))
+	}).collect::<Vec<_>>();
+
+	let signatures = sign_data_vec(&shares_to_sign , Sha3::sha3_512());
+
 	let mut result = Vec::with_capacity(n as usize);
 
-	for (index, share) in shares.into_iter().enumerate() {
+	for ((index, share), (signature, proof)) in shares.into_iter().enumerate().zip(signatures.into_iter()) {
 		let mut share_protobuf = ShareData::new();
 		share_protobuf.set_shamirData(share);
+		share_protobuf.set_signature(RepeatedField::from_vec(signature));
+
 
 		let b64_share = share_protobuf.write_to_bytes().unwrap().to_base64(config);
 		let string = format!("{}-{}-{}", k, index+1, b64_share);

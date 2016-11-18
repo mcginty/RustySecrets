@@ -2,7 +2,6 @@ syntax = "proto3";
 
 message ShareData {
 	bytes shamirData = 1;
-	bytes signature  = 2;
-	bytes proof      = 3;
+	repeated bytes signature = 2;
+	bytes proof = 3;
 }
-
